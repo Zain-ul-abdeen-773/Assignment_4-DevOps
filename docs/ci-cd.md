@@ -36,7 +36,7 @@ gh auth login -h github.com --web --git-protocol https --scopes repo,workflow
 .\scripts\configure-github-actions.ps1
 ```
 
-The script sets the required repository secrets, variables, and branch protection for `main`. It uses `Assignment-4-key.pem`, base64-encodes `server/.env`, and prompts for SMTP and email values if they are not already available as environment variables.
+The script sets the required repository secrets, variables, and branch protection for `main`. It uses `Assignment-4-key.pem`, base64-encodes server env files (if provided), and prompts for SMTP and email values if they are not already available as environment variables.
 
 To set only the known EC2, SSH, env, URL, and branch-protection values first:
 ```powershell
@@ -44,6 +44,16 @@ To set only the known EC2, SSH, env, URL, and branch-protection values first:
 ```
 
 The script defaults Mailtrap SMTP to `live.smtp.mailtrap.io`, port `587`, username `api`; it still prompts for the token/password and sender/recipient emails.
+
+By default, the script looks for `server/.env` and uses it for both `SERVER_ENV_B64_TESTING` and `SERVER_ENV_B64_STAGING` when present. To configure different env files per environment:
+```powershell
+.\scripts\configure-github-actions.ps1 -ServerEnvPathTesting .\server\.env.testing -ServerEnvPathStaging .\server\.env.staging
+```
+
+To skip server env secret upload entirely:
+```powershell
+.\scripts\configure-github-actions.ps1 -SkipServerEnv
+```
 
 ## Base64 helper
 Linux/macOS:

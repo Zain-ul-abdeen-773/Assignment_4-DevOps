@@ -9,6 +9,8 @@ param(
   [string]$TestingHost = "44.197.47.89",
   [string]$StagingHost = "54.208.194.141",
   [string]$ServerEnvPath = ".\server\.env",
+  [string]$ServerEnvPathTesting,
+  [string]$ServerEnvPathStaging,
 
   [string]$TestingUrl = "http://44.197.47.89",
   [string]$StagingUrl = "http://54.208.194.141",
@@ -26,6 +28,7 @@ param(
   [string]$DevEmails = $env:DEV_EMAILS,
 
   [switch]$SkipEmailSecrets,
+  [switch]$SkipServerEnv,
   [switch]$SkipBranchProtection
 )
 
@@ -103,7 +106,7 @@ function Set-RepoSecret {
   )
 
   Write-Host "Setting secret $Name"
-  & gh secret set $Name --repo $Repo --app actions --body $Value | Out-Host
+  $Value | & gh secret set $Name --repo $Repo --app actions | Out-Host
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to set secret $Name."
   }
@@ -135,12 +138,34 @@ function Set-RepoVariable {
   }
 }
 
+function Resolve-OptionalFilePath {
+  param(
+    [string]$Path,
+    [string]$Label,
+    [switch]$Required
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $null
+  }
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    if ($Required) {
+      throw "$Label file not found at '$Path'."
+    }
+
+    Write-Host "$Label file not found at '$Path'; skipping."
+    return $null
+  }
+
+  return (Resolve-Path -LiteralPath $Path).Path
+}
+
 Require-Command git
 Require-Command gh
 
 $Repo = Resolve-Repo $Repo
 $resolvedKeyPath = (Resolve-Path -LiteralPath $SshKeyPath).Path
-$resolvedEnvPath = (Resolve-Path -LiteralPath $ServerEnvPath).Path
 
 Write-Host "Using GitHub repository $Repo"
 & gh auth status | Out-Host
@@ -158,15 +183,37 @@ if (-not $SkipEmailSecrets) {
   $DevEmails = Read-RequiredValue "DEV_EMAILS" $DevEmails
 }
 
-$serverEnvB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([IO.File]::ReadAllText($resolvedEnvPath)))
+$serverEnvPathExplicit = $PSBoundParameters.ContainsKey("ServerEnvPath")
+$serverEnvPathTestingExplicit = $PSBoundParameters.ContainsKey("ServerEnvPathTesting")
+$serverEnvPathStagingExplicit = $PSBoundParameters.ContainsKey("ServerEnvPathStaging")
+
+$resolvedTestingEnvPath = $null
+$resolvedStagingEnvPath = $null
+if (-not $SkipServerEnv) {
+  $resolvedTestingEnvPath = Resolve-OptionalFilePath -Path $(if ($serverEnvPathTestingExplicit) { $ServerEnvPathTesting } else { $ServerEnvPath }) -Label "Testing server env" -Required:($serverEnvPathTestingExplicit -or $serverEnvPathExplicit)
+  $resolvedStagingEnvPath = Resolve-OptionalFilePath -Path $(if ($serverEnvPathStagingExplicit) { $ServerEnvPathStaging } else { $ServerEnvPath }) -Label "Staging server env" -Required:($serverEnvPathStagingExplicit -or $serverEnvPathExplicit)
+}
 
 Set-RepoSecret "SSH_USER" $SshUser
 Set-RepoSecretFromFile "SSH_KEY" $resolvedKeyPath
 Set-RepoSecret "SSH_PORT" $SshPort
 Set-RepoSecret "TESTING_HOST" $TestingHost
 Set-RepoSecret "STAGING_HOST" $StagingHost
-Set-RepoSecret "SERVER_ENV_B64_TESTING" $serverEnvB64
-Set-RepoSecret "SERVER_ENV_B64_STAGING" $serverEnvB64
+if ($resolvedTestingEnvPath) {
+  $testingEnvB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([IO.File]::ReadAllText($resolvedTestingEnvPath)))
+  Set-RepoSecret "SERVER_ENV_B64_TESTING" $testingEnvB64
+}
+else {
+  Write-Host "Skipping SERVER_ENV_B64_TESTING (no testing env file provided)."
+}
+
+if ($resolvedStagingEnvPath) {
+  $stagingEnvB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([IO.File]::ReadAllText($resolvedStagingEnvPath)))
+  Set-RepoSecret "SERVER_ENV_B64_STAGING" $stagingEnvB64
+}
+else {
+  Write-Host "Skipping SERVER_ENV_B64_STAGING (no staging env file provided)."
+}
 if (-not $SkipEmailSecrets) {
   Set-RepoSecret "SMTP_HOST" $SmtpHost
   Set-RepoSecret "SMTP_PORT" $SmtpPort
