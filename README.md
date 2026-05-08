@@ -22,7 +22,7 @@ The main assignment goal is to demonstrate a CI/CD pipeline using GitHub Actions
 | Process manager | PM2 | Keeps the backend running on EC2 |
 | Reverse proxy | Nginx | Serves the React build and proxies `/api` to Express |
 | CI/CD | GitHub Actions | Build, test, lint, deploy, and notify |
-| Cloud | AWS EC2 Ubuntu Server 24 LTS target | Testing and staging environments |
+| Cloud | AWS EC2 Ubuntu Server 24.04 LTS target | Testing and staging environments |
 
 ## Features
 
