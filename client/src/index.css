@@ -1,0 +1,28 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: "Manrope", sans-serif;
+  background-color: #020617;
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(79,70,229,0.2)];
+  }
+
+  .neon-ring {
+    @apply ring-1 ring-indigo-400/40 shadow-[0_0_25px_rgba(129,140,248,0.4)];
+  }
+
+  .text-glow {
+    text-shadow: 0 0 18px rgba(129, 140, 248, 0.5);
+  }
+}

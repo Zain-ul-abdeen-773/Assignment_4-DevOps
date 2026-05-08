@@ -1,0 +1,12 @@
+flowchart TD
+  Dev[Developer creates feature branch] --> PR[Open PR to main]
+  PR --> TestWF[Testing workflow]
+  TestWF -->|build + test + lint| DeployTest[Deploy to Testing EC2]
+  DeployTest --> QA[QA validates changes]
+  QA --> Merge[Merge to main]
+  Merge --> StagingWF[Staging workflow]
+  StagingWF -->|build + test + lint| DeployStage[Deploy to Staging EC2]
+  TestWF -->|notify| EmailFail[Email on failure]
+  DeployTest -->|notify| EmailSuccess[Email on success]
+  StagingWF -->|notify| EmailFail
+  DeployStage -->|notify| EmailSuccess

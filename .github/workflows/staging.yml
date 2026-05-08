@@ -1,0 +1,129 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: "Branch or tag to deploy"
+        required: false
+        default: "main"
+
+jobs:
+  build-test-lint-deploy:
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: "18"
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGPORT: "5432"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create test database
+        env:
+          PGPASSWORD: ${{ env.PGPASSWORD }}
+        run: psql -h $PGHOST -U $PGUSER -p $PGPORT -c "CREATE DATABASE ai_model_registry_test;"
+
+      - name: Build frontend
+        run: npm --prefix client run build
+
+      - name: Run unit tests
+        run: npm --prefix server run test
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_BRANCH: ${{ github.event.inputs.deploy_ref || github.ref_name }}
+          APP_ENV: staging
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          SERVER_ENV_B64: ${{ secrets.SERVER_ENV_B64_STAGING }}
+          CLIENT_ORIGIN: ${{ vars.STAGING_URL }}
+          VITE_API_URL: ${{ vars.STAGING_API_URL }}
+          SEED_ON_DEPLOY: ${{ vars.SEED_ON_DEPLOY || 'false' }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          envs: DEPLOY_BRANCH,APP_ENV,REPO_URL,SERVER_ENV_B64,CLIENT_ORIGIN,VITE_API_URL,SEED_ON_DEPLOY
+          script: |
+            set -e
+            if [ -z "$DEPLOY_BRANCH" ]; then
+              DEPLOY_BRANCH="main"
+            fi
+            if [ ! -d /opt/ai-model-registry ]; then
+              sudo mkdir -p /opt/ai-model-registry
+              sudo chown $USER:$USER /opt/ai-model-registry
+              git clone "$REPO_URL" /opt/ai-model-registry
+            fi
+            cd /opt/ai-model-registry
+            git fetch origin "$DEPLOY_BRANCH"
+            git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
+            git pull origin "$DEPLOY_BRANCH"
+            bash deploy/remote_deploy.sh
+
+      - name: Notify success
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          from: ${{ secrets.SMTP_FROM }}
+          to: ${{ secrets.QA_EMAIL }}
+          subject: "Staging deploy succeeded: ${{ github.repository }}"
+          body: |
+            Staging deployment succeeded.
+            Repo: ${{ github.repository }}
+            Ref: ${{ github.event.inputs.deploy_ref || github.ref_name }}
+            URL: ${{ vars.STAGING_URL }}
+
+      - name: Notify failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          from: ${{ secrets.SMTP_FROM }}
+          to: ${{ secrets.QA_EMAIL }},${{ secrets.DEV_EMAILS }}
+          subject: "Staging deploy failed: ${{ github.repository }}"
+          body: |
+            Staging workflow failed.
+            Repo: ${{ github.repository }}
+            Ref: ${{ github.event.inputs.deploy_ref || github.ref_name }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

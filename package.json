@@ -1,0 +1,18 @@
+{
+  "name": "ai-model-registry",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c red,blue \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "test": "npm --prefix server run test",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint",
+    "build": "npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
