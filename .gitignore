@@ -5,3 +5,5 @@ server/coverage
 .env
 .env.*
 *.pem
+!.env.example
+!server/.env.example
