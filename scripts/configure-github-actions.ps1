@@ -208,7 +208,7 @@ if (-not $SkipBranchProtection) {
     allow_force_pushes = $false
     allow_deletions = $false
     block_creations = $false
-    required_conversation_resolution = $true
+    required_conversation_resolution = $false
   }
 
   $payloadPath = [IO.Path]::GetTempFileName()
