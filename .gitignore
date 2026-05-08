@@ -4,3 +4,4 @@ server/coverage
 .DS_Store
 .env
 .env.*
+*.pem
